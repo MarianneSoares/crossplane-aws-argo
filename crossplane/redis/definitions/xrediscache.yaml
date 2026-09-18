@@ -1,22 +1,17 @@
-apiVersion: apiextensions.crossplane.io/v2
+apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xrediscaches.platform.vivo.infra.aws
+  name: xredisclusters.platform.vivo.infra.aws
 spec:
-  scope: Namespaced
   group: platform.vivo.infra.aws
   names:
-    kind: XRedisCache
-    plural: xrediscaches
-    singular: xrediscache
-    shortNames:
-      - rc
+    kind: XRedisCacheCluster
+    plural: xredisclusters
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
       schema:
-      #o que o dev pode configurar
         openAPIV3Schema:
           type: object
           properties:

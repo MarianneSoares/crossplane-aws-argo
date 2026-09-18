@@ -1,7 +1,7 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: xrediscaches.platform.vivo.infra.aws
+  name: xredisclusters.platform.vivo.infra.aws
   labels:
     provider: aws
     service: elasticache
@@ -9,7 +9,7 @@ metadata:
 spec:
   compositeTypeRef:
     apiVersion: platform.vivo.infra.aws/v1alpha1
-    kind: XRedisCache
+    kind: XRedisCacheCluster
 
   mode: Pipeline
   pipeline:
@@ -31,9 +31,6 @@ spec:
                   subnetIds: []
                 providerConfigRef:
                   name: aws-default
-                  kind: ProviderConfig
-
-                # dinamicos -> acontece quando executar os manifestos
             patches:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.parameters.clusterId
@@ -61,9 +58,6 @@ spec:
                   port: 6379
                 providerConfigRef:
                   name: aws-default
-                  kind: ProviderConfig
-                  
-              # dinamicos -> acontece quando executar os manifestos
             patches:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.parameters.clusterId

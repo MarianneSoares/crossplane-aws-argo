@@ -10,13 +10,7 @@ spec:
   source:
     repoURL: https://github.com/MarianneSoares/crossplane-aws-argo.git
     targetRevision: main
-    path: crossplane/claims
+    path: crossplane/redis/claims
   destination:
     server: https://kubernetes.default.svc
     namespace: default
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
