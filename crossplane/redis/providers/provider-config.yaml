@@ -1,0 +1,14 @@
+# ProviderConfig usado por todos os recursos AWS (S3 e ElastiCache).
+# O secret "aws-creds" deve ser criado manualmente no namespace crossplane-system,
+# NUNCA commitado neste repositório (veja README.md).
+apiVersion: aws.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: aws-default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: aws-creds
+      key: creds

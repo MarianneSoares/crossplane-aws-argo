@@ -1,0 +1,72 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xs3buckets.storage.example.org
+  labels:
+    provider: aws
+    service: s3
+spec:
+  compositeTypeRef:
+    apiVersion: storage.example.org/v1alpha1
+    kind: XS3Bucket
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: bucket
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: Bucket
+              spec:
+                forProvider:
+                  region: us-east-1
+                providerConfigRef:
+                  name: aws-default
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.bucketName
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.tags
+                toFieldPath: spec.forProvider.tags
+            connectionDetails:
+              - name: bucketArn
+                type: FromFieldPath
+                fromFieldPath: status.atProvider.arn
+          - name: bucketAcl
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketACL
+              spec:
+                forProvider:
+                  acl: private
+                  bucketRef:
+                    name: placeholder
+                providerConfigRef:
+                  name: aws-default
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.bucketName
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-acl"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.acl
+                toFieldPath: spec.forProvider.acl
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.bucketName
+                toFieldPath: spec.forProvider.bucketRef.name

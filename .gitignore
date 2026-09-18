@@ -1,0 +1,3 @@
+aws-credentials.ini
+*.env
+.DS_Store

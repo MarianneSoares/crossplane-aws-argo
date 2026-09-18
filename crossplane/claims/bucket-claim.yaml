@@ -1,0 +1,15 @@
+apiVersion: storage.example.org/v1alpha1
+kind: S3Bucket
+metadata:
+  name: app-assets-bucket
+  namespace: default
+spec:
+  parameters:
+    bucketName: my-company-app-assets-prod
+    region: us-east-1
+    acl: private
+    tags:
+      environment: production
+      managed-by: crossplane
+  compositionRef:
+    name: xs3buckets.storage.example.org

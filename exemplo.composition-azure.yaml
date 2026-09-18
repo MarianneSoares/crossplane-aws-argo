@@ -1,0 +1,153 @@
+# Composition that implements the XKeyVault XRD contract for Azure, using
+# provider-azure-keyvault (family: provider-family-azure).
+#
+# Crossplane v2 removed the native "patch and transform" Composition mode -
+# Compositions now run as a Pipeline of Functions. This uses
+# function-patch-and-transform (crossplane/functions/function-patch-and-transform.yaml)
+# to reproduce the same patch/transform behavior as a pipeline step.
+#
+# The composed resource uses the keyvault.azure.m.upbound.io/v1beta1 Vault
+# (namespaced "m" family variant), validated end-to-end (akv-teste25).
+# Crossplane propagates the XR's own namespace onto this composed resource
+# automatically - see ../xresourcegroup for the same pattern.
+#
+# providerConfigRef uses kind: ClusterProviderConfig (see
+# crossplane/config/clusterproviderconfig-azure.yaml) so every team/product
+# namespace can share the same platform-managed Azure credentials without
+# duplicating the Secret per namespace.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xkeyvaults.azure.platform.vivo.infra.azure
+  labels:
+    provider: azure
+spec:
+  compositeTypeRef:
+    apiVersion: platform.vivo.infra.azure/v1alpha1
+    kind: XKeyVault
+  mode: Pipeline
+  # Every Tech Product namespace follows the <sigla>-<env> convention (see
+  # argocd/applicationset-tech-products-env.yaml), which is exactly the XR's
+  # own metadata.namespace. We reuse that value - with no new field required
+  # from the developer - to select the EnvironmentConfig that centralizes
+  # cross-cutting config (resourceGroupName, location, tags, ...) for that
+  # sigla/env. Each EnvironmentConfig is versioned in Git alongside the Tech
+  # Product instances it applies to:
+  #   crossplane/environments/<sigla>/<env>/environmentconfig.yaml
+  # and carries a matching label (sigla-ambiente: <sigla>-<env>).
+  #
+  # Crossplane >= v1.18 removed the native spec.environment.environmentConfigs
+  # selection field from the Composition API (confirmed: kubectl apply fails
+  # with "unknown field" on this cluster's Crossplane version). The
+  # replacement is the function-environment-configs Function, run as the
+  # first pipeline step below - it selects/merges the EnvironmentConfig(s)
+  # and writes the result to the pipeline Context, where the
+  # function-patch-and-transform step reads it via FromEnvironmentFieldPath.
+  # See crossplane/functions/function-environment-configs.yaml and
+  # https://docs.crossplane.io/latest/composition/environment-configs/
+  pipeline:
+    - step: environment-configs
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Selector
+              selector:
+                mode: Single
+                matchLabels:
+                  - key: sigla-ambiente
+                    type: FromCompositeFieldPath
+                    valueFromFieldPath: metadata.namespace
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: vault
+            base:
+              apiVersion: keyvault.azure.m.upbound.io/v1beta1
+              kind: Vault
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: azure-poc
+                # Default seguro - NUNCA deixar isso de fora do base: se o patch abaixo
+                # for pulado (annotation ausente, o caso normal), sem este default o MR cai
+                # no default da propria CRD (managementPolicies: ['*'] = FullControl, o
+                # Crossplane autocorrige drift sozinho). Achado real testando (Etapa 11).
+                managementPolicies:
+                  - Observe
+                  - Create
+                  - Delete
+                forProvider:
+                  # Único tenant/subscription existente neste PoC.
+                  tenantId: "2103dabc-3c55-488c-be2e-8f3a5ab086bd"
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+              # managementPolicies (Etapa 11, INFRA_AS_CODE_IMPL.md): override condicional do
+              # default acima - so roda quando a annotation existe (FromCompositeFieldPath e
+              # Optional por padrao: se a annotation nao existir, o patch e pulado e o default
+              # do base prevalece). Nunca um campo de spec (vazaria pro openAPIV3Schema da XRD).
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.annotations['platform.vivo.infra.azure/force-update']
+                toFieldPath: spec.managementPolicies
+                transforms:
+                  - type: match
+                    match:
+                      patterns:
+                        - type: literal
+                          literal: "true"
+                          result: [Observe, Create, Delete, Update]
+                      fallbackValue: [Observe, Create, Delete]
+              # --- EnvironmentConfig defaults (applied first) ---
+              # resourceGroupName/location come from the sigla/env
+              # EnvironmentConfig by default. The FromCompositeFieldPath
+              # patches below run AFTER these and use the default Optional
+              # policy, so they only overwrite the value when the developer
+              # explicitly sets spec.resourceGroupName/spec.location on the
+              # XR instance (manual override still works).
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: azure.resourceGroupName
+                toFieldPath: spec.forProvider.resourceGroupName
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: azure.location
+                toFieldPath: spec.forProvider.location
+              # Tags are purely cross-cutting (sigla/ambiente/costCenter) -
+              # sourced only from the EnvironmentConfig, no per-instance field.
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: tags
+                toFieldPath: spec.forProvider.tags
+              # --- Per-instance overrides (Optional policy: skipped if the
+              # field isn't set on the XR, so the EnvironmentConfig value
+              # above stands) ---
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.location
+                toFieldPath: spec.forProvider.location
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.resourceGroupName
+                toFieldPath: spec.forProvider.resourceGroupName
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.skuName
+                toFieldPath: spec.forProvider.skuName
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.softDeleteRetentionDays
+                toFieldPath: spec.forProvider.softDeleteRetentionDays
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.purgeProtectionEnabled
+                toFieldPath: spec.forProvider.purgeProtectionEnabled
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.publicNetworkAccessEnabled
+                toFieldPath: spec.forProvider.publicNetworkAccessEnabled
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.enableRbacAuthorization
+                toFieldPath: spec.forProvider.enableRbacAuthorization
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.vaultUri
+                toFieldPath: status.vaultUri

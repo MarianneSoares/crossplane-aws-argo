@@ -1,0 +1,114 @@
+# XRD (CompositeResourceDefinition) for the "KeyVault" Tech Product.
+#
+# This defines the PUBLIC, curated API of the Tech Product that the IDP (or
+# any consumer) uses - never the raw Managed Resource.
+#
+# provider-azure-keyvault ships the Vault MR under two api groups:
+#   - keyvault.azure.upbound.io/v1beta1   (legacy, Cluster scoped)
+#   - keyvault.azure.m.upbound.io/v1beta1 (namespaced "m" family variant)
+# Earlier testing on provider-azure-keyvault v2.6.0/v2.6.1 found the
+# namespaced Vault controller not reconciling, but that's no longer the
+# case on v2.6.2 (validated end-to-end: akv-teste25, namespace
+# tpaz-crossplane, SYNCED/READY). This XRD is now Namespaced, and the
+# Composition targets keyvault.azure.m.upbound.io, matching the
+# Namespaced XRD -> Namespaced MR pattern used by ../xresourcegroup.
+#
+# A future composition-oci.yaml could implement the exact same contract for
+# OCI without changing this XRD at all.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: xkeyvaults.platform.vivo.infra.azure
+spec:
+  scope: Namespaced
+  group: platform.vivo.infra.azure
+  names:
+    kind: XKeyVault
+    plural: xkeyvaults
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                # location/resourceGroupName have NO schema default anymore
+                # (see EnvironmentConfig proposal): when the developer leaves
+                # them blank in the IDP form, the field is omitted from the
+                # XR entirely, and the Composition falls back to the value
+                # from the sigla/env EnvironmentConfig
+                # (crossplane/environments/<sigla>/<env>/environmentconfig.yaml).
+                # Setting a value here still works as a manual per-instance
+                # override - the Composition patch applies it after the
+                # EnvironmentConfig-based default.
+                #
+                # x-kubernetes-validations below mark these fields immutable
+                # (self == oldSelf is only evaluated on UPDATE, never on
+                # CREATE, so first-time provisioning is unaffected). This is
+                # the single source of truth the IDP (ms-platformcode-infra-v1)
+                # reads to know which fields it must lock in the edit form
+                # once the resource is PROVISIONED.
+                location:
+                  type: string
+                  description: >-
+                    Região Azure onde o Key Vault será criado. Se omitido,
+                    usa o valor do EnvironmentConfig do sigla/ambiente.
+                  x-kubernetes-validations:
+                    - rule: "self == oldSelf"
+                      message: "location é imutável após a criação do recurso."
+                resourceGroupName:
+                  type: string
+                  description: >-
+                    Resource Group Azure de destino. Se omitido, usa o valor
+                    do EnvironmentConfig do sigla/ambiente.
+                  x-kubernetes-validations:
+                    - rule: "self == oldSelf"
+                      message: "resourceGroupName é imutável após a criação do recurso."
+                skuName:
+                  type: string
+                  description: SKU do Key Vault.
+                  enum: [standard, premium]
+                  default: standard
+                softDeleteRetentionDays:
+                  type: integer
+                  description: Dias de retenção do soft-delete (7-90).
+                  minimum: 7
+                  maximum: 90
+                  default: 7
+                  x-kubernetes-validations:
+                    - rule: "self == oldSelf"
+                      message: "softDeleteRetentionDays é imutável após a criação do recurso (restrição da Azure)."
+                purgeProtectionEnabled:
+                  type: boolean
+                  default: false
+                publicNetworkAccessEnabled:
+                  type: boolean
+                  default: true
+                enableRbacAuthorization:
+                  type: boolean
+                  default: true
+              required:
+                - skuName
+                - softDeleteRetentionDays
+            status:
+              type: object
+              properties:
+                vaultUri:
+                  type: string
+                  description: URI real do Key Vault, refletido da Azure (status.atProvider da MR).
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                    x-kubernetes-preserve-unknown-fields: true

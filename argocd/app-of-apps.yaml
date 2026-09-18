@@ -1,0 +1,25 @@
+# Application "raiz" (padrão app-of-apps). Aponta para argocd/applications,
+# que contém as Applications filhas (providers, definitions, compositions, claims).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-aws-argo-root
+  namespace: argocd
+spec:
+  project: crossplane-aws
+  source:
+    # TODO: ajuste para a URL do seu repositório Git
+    repoURL: https://github.com/MarianneSoares/crossplane-aws-argo.git
+    targetRevision: main
+    path: argocd/applications
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

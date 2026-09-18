@@ -1,0 +1,97 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xrediscaches.platform.vivo.infra.aws
+  labels:
+    provider: aws
+    service: elasticache
+
+spec:
+  compositeTypeRef:
+    apiVersion: platform.vivo.infra.aws/v1alpha1
+    kind: XRedisCache
+
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: subnetGroup
+            base:
+              apiVersion: elasticache.aws.upbound.io/v1beta1
+              kind: SubnetGroup
+              spec:
+                forProvider:
+                  region: us-east-1
+                  description: Subnet group gerenciado pelo Crossplane
+                  subnetIds: []
+                providerConfigRef:
+                  name: aws-default
+                  kind: ProviderConfig
+
+                # dinamicos -> acontece quando executar os manifestos
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterId
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-subnet-group"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.subnetIds
+                toFieldPath: spec.forProvider.subnetIds
+
+          - name: cacheCluster
+            base:
+              apiVersion: elasticache.aws.upbound.io/v1beta1
+              kind: Cluster
+              spec:
+                forProvider:
+                  region: us-east-1
+                  engine: redis
+                  port: 6379
+                providerConfigRef:
+                  name: aws-default
+                  kind: ProviderConfig
+                  
+              # dinamicos -> acontece quando executar os manifestos
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterId
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.nodeType
+                toFieldPath: spec.forProvider.nodeType
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.numCacheNodes
+                toFieldPath: spec.forProvider.numCacheNodes
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.engineVersion
+                toFieldPath: spec.forProvider.engineVersion
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterId
+                toFieldPath: spec.forProvider.subnetGroupName
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-subnet-group"
+            connectionDetails:
+              - name: endpointAddress
+                type: FromFieldPath
+                fromFieldPath: status.atProvider.cacheNodes[0].address
+              - name: endpointPort
+                type: FromFieldPath
+                fromFieldPath: status.atProvider.cacheNodes[0].port
