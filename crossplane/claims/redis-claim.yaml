@@ -1,14 +1,15 @@
-apiVersion: cache.example.org/v1alpha1
-kind: RedisCache
+apiVersion: platform.vivo.infra.aws/v1alpha1
+kind: XRedisCache
 metadata:
   name: app-redis-cache
   namespace: default
 spec:
-  clusterId: app-redis-prod
-  region: us-east-1
-  nodeType: cache.t3.micro
-  numCacheNodes: 1
-  engineVersion: "7.1"
-  subnetIds:
-    - subnet-0f06a150456c0952c
-    - subnet-04f8416c7fa2b67ca
+  parameters:
+    clusterId: app-redis-prod
+    region: us-east-1
+    nodeType: cache.t3.micro
+    numCacheNodes: 1
+    engineVersion: "7.1"
+    subnetIds:
+      - subnet-0f06a150456c0952c
+      - subnet-04f8416c7fa2b67ca
